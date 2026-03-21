@@ -1,4 +1,4 @@
-# Git to SVN :(
+# SVN for Git users.
 
 Some useful information can be found at [svnbook.red-bean.com](http://svnbook.red-bean.com).
 
