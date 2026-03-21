@@ -46,11 +46,23 @@ $ git clone REPO
 $ svn copy CURRENT_BRANCH NEW_BRANCH -m "MESSAGE"
 ```
 
+SVN 1.5+ supports the `^/` prefix as a shorthand for the repository root URL. This means you rarely need to type (or even know) the full server URL when referencing branches, tags, or trunk.
+
+```
+^/trunk               →  https://code.example.com/repo/trunk
+^/features/my_branch  →  https://code.example.com/repo/features/my_branch
+```
+
 ## 2.1 Example
 
 ```bash
+# Traditional: full URLs
 $ svn copy https://code.example.com/repo/trunk \
     https://code.example.com/repo/features/feature_branch \
+    -m "Creating a private branch of /repo/trunk."
+
+# Modern: using ^ (caret) shorthand for the repository root (SVN 1.5+)
+$ svn copy ^/trunk ^/features/feature_branch \
     -m "Creating a private branch of /repo/trunk."
 ```
 
@@ -69,7 +81,11 @@ $ svn switch BRANCH
 ## 3.1 Example
 
 ```bash
+# Traditional: full URL
 $ svn switch https://code.example.com/repo/features/feature_branch
+
+# Modern: using ^ shorthand
+$ svn switch ^/features/feature_branch
 ```
 ## 3.2 Git Equivalent
 
@@ -86,12 +102,14 @@ $ svn update
 ## 4.1 Example
 
 ```bash
-$ svn switch https://code.example.com/repo/trunk
+$ svn switch ^/trunk
 $ svn update
-$ svn switch https://code.example.com/repo/features/feature_branch
-$ svn merge https://code.example.com/repo/trunk
+$ svn switch ^/features/feature_branch
+$ svn merge ^/trunk
 $ svn ci -m "Merge branch trunk into feature_branch"
 ```
+
+> **Note:** SVN automatically tracks which revisions have already been merged (via `svn:mergeinfo`). For a regular sync you do **not** need to specify a revision range — `svn merge ^/trunk` will merge only the revisions not yet merged into your branch. Explicit ranges (e.g. `-r 4100:4200`) are only needed when intentionally cherry-picking a specific set of commits.
 
 ## 4.2 Git Equivalent
 
@@ -108,12 +126,14 @@ $ svn merge BRANCH
 ## 5.1 Example
 
 ```bash
-$ svn switch https://code.example.com/repo/trunk
+$ svn switch ^/trunk
 $ svn update
-$ svn merge --reintegrate https://code.example.com/repo/features/my_feature
+$ svn merge ^/features/my_feature
 $ svn update
 $ svn commit -m "Merge branch my_feature into trunk"
 ```
+
+> **Note:** The `--reintegrate` flag is deprecated since SVN 1.8 — a plain `svn merge` now handles reintegration automatically. As with sync merges, you do **not** need to specify a revision range; SVN's merge tracking ensures only unmerged revisions are applied. Use an explicit range only when cherry-picking specific commits.
 
 ## 5.2 Git Equivalent
 
@@ -187,7 +207,14 @@ features/
 tags/
 trunk/
 
-$ svn ls https://code.example.com/repo/features
+# Using ^ shorthand from inside any working copy of this repository
+$ svn ls ^/
+branches/
+features/
+tags/
+trunk/
+
+$ svn ls ^/features
 sprint_17/
 sprint_18/
 sprint_19/
@@ -278,15 +305,14 @@ $ svn checkout https://code.example.com/repo/trunk repo
 ## 15.2 Create Feature Branch
 
 ```bash
-$ svn copy https://code.example.com/repo/trunk \
-    https://code.example.com/repo/features/feature_branch \
+$ svn copy ^/trunk ^/features/feature_branch \
     -m "Creating a private branch of /repo/trunk."
 ```
 
 ## 15.3 Switch
 
 ```bash
-$ svn switch https://code.example.com/repo/features/feature_branch
+$ svn switch ^/features/feature_branch
 ```
 
 ## 15.4 Make Changes
@@ -312,7 +338,7 @@ $ svn commit -m "Made some awesome"
 ## 15.7 Switch to Trunk
 
 ```bash
-$ svn switch https://code.example.com/repo/trunk
+$ svn switch ^/trunk
 ```
 
 ## 15.8 Update From Upstream
@@ -324,7 +350,7 @@ $ svn update
 ## 15.9 Merge New Feature
 
 ```bash
-$ svn merge --reintegrate https://code.example.com/repo/features/feature_branch 
+$ svn merge ^/features/feature_branch
 ```
 
 ## 15.10 Commit Merge
@@ -582,5 +608,121 @@ Last Changed Date: 2024-01-15 10:32:07 +0000 (Mon, 15 Jan 2024)
 ```bash
 $ git remote -v
 $ git log -1
+```
+
+# 23. SVN Tricks: Simulating Git-Like Behavior
+
+SVN lacks some conveniences that Git users rely on daily. The tricks below let you approximate them using standard SVN operations.
+
+## 23.1 Stash — Patch File Approach
+
+Save uncommitted changes to a patch file, revert the working copy, and re-apply later.
+
+```bash
+# "Stash" — save changes and clean the working copy
+$ svn diff > /tmp/my_stash.patch
+$ svn revert . -R
+
+# ... switch tasks, update, do other work ...
+
+# "Pop" — re-apply your saved changes
+$ svn patch /tmp/my_stash.patch
+```
+
+### Git Equivalent
+
+```bash
+$ git stash
+$ git stash pop
+```
+
+## 23.2 Stash — Branch Copy Approach
+
+If you want your stashed work stored safely on the server (not just a local file), copy the working copy — including uncommitted modifications — to a temporary stash branch, then revert.
+
+```bash
+# Copy the current working copy state (with local changes) to a stash branch
+$ svn copy . ^/stashes/my_stash -m "Stashing work-in-progress"
+$ svn revert . -R
+
+# ... switch tasks, update, do other work ...
+
+# Re-apply by merging the stash branch back
+$ svn merge ^/stashes/my_stash
+
+# Clean up the stash branch when done
+$ svn delete ^/stashes/my_stash -m "Removing stash after applying"
+```
+
+> **Tip:** Create the `stashes/` directory in the repository once with `svn mkdir ^/stashes -m "Add stashes directory"` before using this workflow.
+
+### Git Equivalent
+
+```bash
+$ git stash
+$ git stash pop
+```
+
+## 23.3 Shelve (SVN 1.10+)
+
+SVN 1.10 introduced native shelving, which is the closest built-in equivalent of `git stash`.
+
+```bash
+# Shelve all current changes under a name
+$ svn shelve my_stash
+
+# List shelved change sets
+$ svn shelves
+
+# Unshelve (re-apply and remove the shelf)
+$ svn unshelve my_stash
+```
+
+### Git Equivalent
+
+```bash
+$ git stash save "my_stash"
+$ git stash list
+$ git stash pop
+```
+
+## 23.4 Dry-Run Merge (Preview Before Merging)
+
+Check what a merge would do before actually applying it.
+
+```bash
+# Show which revisions would be merged
+$ svn mergeinfo --show-revs eligible ^/features/my_feature
+
+# Preview the diff that a merge would produce
+$ svn merge --dry-run ^/features/my_feature
+```
+
+### Git Equivalent
+
+```bash
+$ git log HEAD..BRANCH --oneline
+$ git diff HEAD...BRANCH
+```
+
+## 23.5 Cherry-Pick a Single Commit
+
+To apply only one specific revision from another branch (the only time an explicit revision range is truly necessary):
+
+```bash
+# Cherry-pick revision 4205 from another branch
+$ svn merge -c 4205 ^/features/my_feature
+
+# Cherry-pick a range (e.g. r4200 through r4205)
+$ svn merge -r 4199:4205 ^/features/my_feature
+```
+
+> **Note:** `-c N` is shorthand for `-r N-1:N`.  For ordinary sync and reintegration merges, leave out the revision range entirely — SVN's merge tracking (`svn:mergeinfo`) ensures only unmerged revisions are applied.
+
+### Git Equivalent
+
+```bash
+$ git cherry-pick <commit-sha>
+$ git cherry-pick <sha1>^..<sha2>
 ```
 
