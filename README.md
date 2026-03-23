@@ -2,6 +2,8 @@
 
 Some useful information can be found at [svnbook.red-bean.com](http://svnbook.red-bean.com).
 
+> **Migrating from SVN to Git?** See the companion guide: [Git for SVN Users (SVN-TO-GIT.md)](SVN-TO-GIT.md).
+
 # 0. Key Differences to Keep in Mind
 
 | Concept | Git | SVN |
